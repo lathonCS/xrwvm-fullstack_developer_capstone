@@ -49,34 +49,36 @@ def logout_request(request):
 # Create a `registration` view to handle sign up request
 @csrf_exempt
 def registration(request):
-    context = {}
-
-    #Load json data from the request
     data = json.loads(request.body)
+
     username = data['userName']
     password = data['password']
     first_name = data['firstName']
     last_name = data['lastName']
     email = data['email']
-    username_exist = False
-    email_exist = False
-    try:
-        #check if user already exits
-        User.objects.get(username=username)
-        username_exist = True
-    except:
-        #if no user found, log in the new user
-        logger.debug("{} is new user".format(username))
-    
-    #if it is a new user
-    if not username_exist:
-        #create the user into the auth_user table
-        user = User.objects.create_user(username=username, first_name=first_name, last_name=last_name,password=password, email=email)
-        
-    #login the user
+
+    #Check if username already exists
+    if User.objects.filter(username=username).exists():
+        return JsonResponse({
+            "error": "Username already exists"
+        }, status=400)
+
+    #Create user
+    user = User.objects.create_user(
+        username=username,
+        password=password,
+        first_name=first_name,
+        last_name=last_name,
+        email=email
+    )
+
+    #Login user
     login(request, user)
-    data = {"userName:":username, "status:":"Authenticated"}
-    return JsonResponse(data)
+
+    return JsonResponse({
+        "userName": username,
+        "status": "Authenticated"
+    })
 
 def get_cars(request):
     count = CarMake.objects.filter().count()
@@ -104,9 +106,13 @@ def get_dealer_reviews(request,dealer_id):
         endpoint = "/fetchReviews/dealer/"+str(dealer_id)
         reviews = get_request(endpoint)
         for review_detail in reviews:
-            response = analyze_review_sentiments(review_detail)
+            response = analyze_review_sentiments(review_detail["review"])
             print(response)
-            review_detail['sentiment'] = response['sentiment']
+
+            if response and "sentiment" in response:
+                review_detail["sentiment"] = response["sentiment"]
+            else:
+                review_detail["sentiment"] = "neutral"
         return JsonResponse({"status":200,"reviews":reviews})
     else:
         return JsonResponse({"status": 400,"message":"Bad Request"})
